@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reaction Time Task</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-2: #1f2937;
+      --text: #f8fafc;
+      --muted: #cbd5e1;
+      --accent: #60a5fa;
+      --accent-2: #22c55e;
+      --danger: #f87171;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    body {
+      overflow: hidden;
+    }
+
+    .screen {
+      width: 100%;
+      height: 100vh;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .screen.active {
+      display: flex;
+    }
+
+    .panel {
+      width: min(640px, 100%);
+      background: rgba(17, 24, 39, 0.96);
+      border-radius: 18px;
+      padding: 28px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+    }
+
+    h1,
+    h2 {
+      margin-top: 0;
+      margin-bottom: 12px;
+    }
+
+    p {
+      line-height: 1.55;
+      color: var(--muted);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    input {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1px solid #334155;
+      background: #0b1220;
+      color: var(--text);
+      font-size: 16px;
+      margin-bottom: 16px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: #08111f;
+    }
+
+    button:hover {
+      filter: brightness(1.05);
+    }
+
+    .small {
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    #task-screen {
+      position: relative;
+      padding: 0;
+      background: #020617;
+    }
+
+    #task-canvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      cursor: crosshair;
+      background: #020617;
+    }
+
+    #task-overlay {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      padding: 10px 14px;
+      background: rgba(15, 23, 42, 0.82);
+      border-radius: 12px;
+      color: #e2e8f0;
+      font-size: 15px;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    #results-screen {
+      align-items: flex-start;
+      justify-content: center;
+      overflow-y: auto;
+      padding-top: 32px;
+      padding-bottom: 32px;
+    }
+
+    #results-card {
+      width: min(980px, 100%);
+      background: rgba(17, 24, 39, 0.96);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin: 18px 0 20px;
+    }
+
+    .stat {
+      background: var(--panel-2);
+      border-radius: 14px;
+      padding: 16px;
+    }
+
+    .stat .label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    .stat .value {
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    #chart-wrap {
+      width: 100%;
+      background: #fff;
+      border-radius: 16px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+
+    #histogram {
+      width: 100%;
+      height: 420px;
+    }
+
+    .note {
+      margin-top: 12px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .success {
+      color: var(--accent-2);
+    }
+
+    .warning {
+      color: #fbbf24;
+    }
+
+    .error {
+      color: var(--danger);
+    }
+  </style>
+</head>
+<body>
+  <section id="welcome-screen" class="screen active">
+    <div class="panel">
+      <h1>Reaction Time Task</h1>
+      <p>
+        Enter a participant ID if you want to use your own. If you leave it blank,
+        the task will generate one automatically. You will complete 10 trials.
+      </p>
+      <label for="participant-id">Participant ID</label>
+      <input id="participant-id" type="text" placeholder="Type an ID or leave blank" maxlength="40" />
+      <button id="start-btn">Start Task</button>
+      <p class="small">Click the circle as quickly as you can each time it appears.</p>
+    </div>
+  </section>
+
+  <section id="task-screen" class="screen">
+    <div id="task-overlay">Preparing task...</div>
+    <canvas id="task-canvas"></canvas>
+  </section>
+
+  <section id="results-screen" class="screen">
+    <div id="results-card">
+      <h2>Task complete</h2>
+      <p id="results-summary">Getting your results ready...</p>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="label">Participant ID</div>
+          <div class="value" id="stat-id">—</div>
+        </div>
+        <div class="stat">
+          <div class="label">Average RT</div>
+          <div class="value" id="stat-avg">—</div>
+        </div>
+        <div class="stat">
+          <div class="label">Fastest trial</div>
+          <div class="value" id="stat-fastest">—</div>
+        </div>
+        <div class="stat">
+          <div class="label">Slowest trial</div>
+          <div class="value" id="stat-slowest">—</div>
+        </div>
+      </div>
+
+      <div id="save-status" class="note">Sending your 10 trials to Google Sheets...</div>
+
+      <div id="chart-wrap">
+        <canvas id="histogram"></canvas>
+      </div>
+
+      <div id="history-status" class="note"></div>
+      <div class="note">The red vertical line marks your average reaction time.</div>
+    </div>
+  </section>
+
+  <script>
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz9wGokZ2MSLA84xem_ONBxgQiooG4gJb5LmsBeNpSf1-bP8lLl16MIpylKJtFI2W5vRg/exec";
+    const TOTAL_TRIALS = 10;
+    const DELAY_BETWEEN_TRIALS = 500;
+    const CIRCLE_RADIUS = 50;
+
+    const welcomeScreen = document.getElementById("welcome-screen");
+    const taskScreen = document.getElementById("task-screen");
+    const resultsScreen = document.getElementById("results-screen");
+    const startBtn = document.getElementById("start-btn");
+    const participantInput = document.getElementById("participant-id");
+    const overlay = document.getElementById("task-overlay");
+    const canvas = document.getElementById("task-canvas");
+    const ctx = canvas.getContext("2d");
+
+    let participantId = "";
+    let currentTrial = 0;
+    let trials = [];
+    let circle = null;
+    let stimulusStartTime = 0;
+    let acceptingClick = false;
+    let histogramChart = null;
+
+    function showScreen(screenElement) {
+      [welcomeScreen, taskScreen, resultsScreen].forEach(screen => {
+        screen.classList.remove("active");
+      });
+      screenElement.classList.add("active");
+    }
+
+    function generateParticipantID() {
+      return "P" + Math.random().toString(36).slice(2, 10).toUpperCase();
+    }
+
+    function resizeCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      const cssWidth = window.innerWidth;
+      const cssHeight = window.innerHeight;
+      canvas.width = Math.floor(cssWidth * dpr);
+      canvas.height = Math.floor(cssHeight * dpr);
+      canvas.style.width = cssWidth + "px";
+      canvas.style.height = cssHeight + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (circle && taskScreen.classList.contains("active")) {
+        drawCircle(circle.x, circle.y);
+      } else {
+        clearCanvas();
+      }
+    }
+
+    function clearCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#020617";
+      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+    }
+
+    function randomCirclePosition() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const x = CIRCLE_RADIUS + Math.random() * (width - CIRCLE_RADIUS * 2);
+      const y = CIRCLE_RADIUS + Math.random() * (height - CIRCLE_RADIUS * 2);
+      return { x, y, r: CIRCLE_RADIUS };
+    }
+
+    function drawCircle(x, y) {
+      clearCanvas();
+
+      const gradient = ctx.createRadialGradient(x - 12, y - 12, 10, x, y, CIRCLE_RADIUS);
+      gradient.addColorStop(0, "#93c5fd");
+      gradient.addColorStop(1, "#2563eb");
+
+      ctx.beginPath();
+      ctx.arc(x, y, CIRCLE_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(255,255,255,0.8)";
+      ctx.stroke();
+      ctx.closePath();
+    }
+
+    function startTask() {
+      participantId = participantInput.value.trim() || generateParticipantID();
+      currentTrial = 0;
+      trials = [];
+      circle = null;
+      stimulusStartTime = 0;
+      acceptingClick = false;
+      showScreen(taskScreen);
+      resizeCanvas();
+      overlay.textContent = `Participant ${participantId} | Trial 0 of ${TOTAL_TRIALS}`;
+      setTimeout(nextTrial, 700);
+    }
+
+    function nextTrial() {
+      if (currentTrial >= TOTAL_TRIALS) {
+        finishTask();
+        return;
+      }
+
+      currentTrial += 1;
+      overlay.textContent = `Participant ${participantId} | Trial ${currentTrial} of ${TOTAL_TRIALS}`;
+      circle = randomCirclePosition();
+      drawCircle(circle.x, circle.y);
+      stimulusStartTime = performance.now();
+      acceptingClick = true;
+    }
+
+    function canvasPointFromEvent(event) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top
+      };
+    }
+
+    function isInsideCircle(point, shape) {
+      if (!shape) return false;
+      const dx = point.x - shape.x;
+      const dy = point.y - shape.y;
+      return (dx * dx + dy * dy) <= shape.r * shape.r;
+    }
+
+    function handleCanvasClick(event) {
+      if (!acceptingClick || !circle) return;
+
+      const point = canvasPointFromEvent(event);
+      if (!isInsideCircle(point, circle)) return;
+
+      const reactionTime = Math.round(performance.now() - stimulusStartTime);
+      trials.push({
+        Participant_ID: participantId,
+        Trial_Number: currentTrial,
+        Reaction_Time: reactionTime
+      });
+
+      acceptingClick = false;
+      circle = null;
+      clearCanvas();
+
+      if (currentTrial >= TOTAL_TRIALS) {
+        finishTask();
+      } else {
+        setTimeout(nextTrial, DELAY_BETWEEN_TRIALS);
+      }
+    }
+
+    function average(values) {
+      return values.reduce((sum, value) => sum + value, 0) / values.length;
+    }
+
+    function saveTrials(payload) {
+      const body = JSON.stringify(payload);
+
+      try {
+        const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
+        const beaconSent = navigator.sendBeacon && navigator.sendBeacon(WEB_APP_URL, blob);
+        if (beaconSent) {
+          return Promise.resolve({ method: "sendBeacon" });
+        }
+      } catch (error) {
+      }
+
+      return fetch(WEB_APP_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8"
+        },
+        body
+      }).then(() => ({ method: "fetch-no-cors" }));
+    }
+
+    function requestHistoricalRTs() {
+      return new Promise((resolve, reject) => {
+        const callbackName = "__rt_callback_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
+        const script = document.createElement("script");
+
+        window[callbackName] = function(data) {
+          cleanup();
+          resolve(Array.isArray(data) ? data.map(Number).filter(Number.isFinite) : []);
+        };
+
+        script.onerror = function() {
+          cleanup();
+          reject(new Error("Could not load historical RT data."));
+        };
+
+        function cleanup() {
+          delete window[callbackName];
+          if (script.parentNode) {
+            script.parentNode.removeChild(script);
+          }
+        }
+
+        const separator = WEB_APP_URL.includes("?") ? "&" : "?";
+        script.src = `${WEB_APP_URL}${separator}callback=${callbackName}&t=${Date.now()}`;
+        document.body.appendChild(script);
+      });
+    }
+
+    function buildHistogramData(values) {
+      const clean = values.map(Number).filter(Number.isFinite).filter(v => v >= 0);
+      if (clean.length === 0) {
+        return {
+          labels: ["0–100"],
+          counts: [0],
+          rangeStart: 0,
+          rangeEnd: 100,
+          binSize: 100
+        };
+      }
+
+      const min = Math.min(...clean);
+      const max = Math.max(...clean);
+      let binSize = Math.max(25, Math.ceil(((max - min) || 100) / 10 / 25) * 25);
+      if (!Number.isFinite(binSize) || binSize <= 0) binSize = 50;
+
+      let rangeStart = Math.floor(min / binSize) * binSize;
+      let rangeEnd = Math.ceil(max / binSize) * binSize;
+      if (rangeEnd === rangeStart) {
+        rangeEnd = rangeStart + binSize;
+      }
+
+      const labels = [];
+      const counts = [];
+      for (let start = rangeStart; start < rangeEnd; start += binSize) {
+        labels.push(`${start}–${start + binSize}`);
+        counts.push(0);
+      }
+
+      clean.forEach(value => {
+        let index = Math.floor((value - rangeStart) / binSize);
+        if (index < 0) index = 0;
+        if (index >= counts.length) index = counts.length - 1;
+        counts[index] += 1;
+      });
+
+      return { labels, counts, rangeStart, rangeEnd, binSize };
+    }
+
+    function renderHistogram(allRTs, userAverageRT) {
+      const historyWithUser = [...allRTs];
+      const histogramData = buildHistogramData(historyWithUser);
+      const chartCanvas = document.getElementById("histogram");
+      const chartCtx = chartCanvas.getContext("2d");
+
+      if (histogramChart) {
+        histogramChart.destroy();
+      }
+
+      const averageLinePlugin = {
+        id: "averageLinePlugin",
+        afterDatasetsDraw(chart) {
+          const { ctx, chartArea } = chart;
+          if (!chartArea || !Number.isFinite(userAverageRT)) return;
+
+          const totalRange = histogramData.rangeEnd - histogramData.rangeStart;
+          const clampedAverage = Math.min(Math.max(userAverageRT, histogramData.rangeStart), histogramData.rangeEnd);
+          const fraction = totalRange === 0 ? 0 : (clampedAverage - histogramData.rangeStart) / totalRange;
+          const x = chartArea.left + fraction * (chartArea.right - chartArea.left);
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(x, chartArea.top);
+          ctx.lineTo(x, chartArea.bottom);
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = "#dc2626";
+          ctx.stroke();
+
+          ctx.fillStyle = "#dc2626";
+          ctx.font = "bold 12px Arial";
+          ctx.textAlign = "center";
+          ctx.fillText("Your average", x, chartArea.top + 14);
+          ctx.restore();
+        }
+      };
+
+      histogramChart = new Chart(chartCtx, {
+        type: "bar",
+        data: {
+          labels: histogramData.labels,
+          datasets: [{
+            label: "Count",
+            data: histogramData.counts,
+            backgroundColor: "rgba(59, 130, 246, 0.75)",
+            borderColor: "rgba(37, 99, 235, 1)",
+            borderWidth: 1,
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label(context) {
+                  return `Count: ${context.raw}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: `Reaction time bins (${histogramData.binSize} ms each)`
+              }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              },
+              title: {
+                display: true,
+                text: "Frequency"
+              }
+            }
+          }
+        },
+        plugins: [averageLinePlugin]
+      });
+    }
+
+    function setResultsText(userRTs) {
+      const avg = Math.round(average(userRTs));
+      const fastest = Math.min(...userRTs);
+      const slowest = Math.max(...userRTs);
+
+      document.getElementById("stat-id").textContent = participantId;
+      document.getElementById("stat-avg").textContent = `${avg} ms`;
+      document.getElementById("stat-fastest").textContent = `${fastest} ms`;
+      document.getElementById("stat-slowest").textContent = `${slowest} ms`;
+      document.getElementById("results-summary").textContent = `You finished all 10 trials. Your average reaction time was ${avg} ms.`;
+
+      return avg;
+    }
+
+    async function finishTask() {
+      showScreen(resultsScreen);
+      const userRTs = trials.map(t => Number(t.Reaction_Time));
+      const userAverageRT = setResultsText(userRTs);
+      const saveStatus = document.getElementById("save-status");
+      const historyStatus = document.getElementById("history-status");
+
+      try {
+        await saveTrials(trials);
+        saveStatus.innerHTML = `<span class="success">Save request sent successfully.</span> 10 trials were packaged for Google Sheets.`;
+      } catch (error) {
+        saveStatus.innerHTML = `<span class="error">The save request could not be sent.</span> ${error.message}`;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1200));
+
+      try {
+        const historicalRTs = await requestHistoricalRTs();
+        const dataToPlot = historicalRTs.length ? historicalRTs : userRTs;
+        renderHistogram(dataToPlot, userAverageRT);
+        historyStatus.innerHTML = `<span class="success">Histogram loaded.</span> Historical reaction times fetched: ${historicalRTs.length}.`;
+      } catch (error) {
+        renderHistogram(userRTs, userAverageRT);
+        historyStatus.innerHTML = `<span class="warning">Live history could not be loaded, so the chart is showing your current session only.</span>`;
+      }
+    }
+
+    startBtn.addEventListener("click", startTask);
+    canvas.addEventListener("click", handleCanvasClick);
+    window.addEventListener("resize", resizeCanvas);
+    participantInput.addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        startTask();
+      }
+    });
+
+    resizeCanvas();
+  </script>
+</body>
+</html>
